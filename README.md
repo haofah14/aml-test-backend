@@ -32,7 +32,9 @@ pip install -r requirements.txt
 ## 4. add supabase credentials
 
 create a new file named .env in the project folder (same level as app.py and db.py).
-paste your Supabase credentials:
+paste your Supabase credentials
+supabase url can be found in project settings > data API > project URL
+supabase key can be found in project settings > API keys > legacy API keys > service_role 
 
 ```
 SUPABASE_URL=https://yourproject.supabase.co
