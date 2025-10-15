@@ -1,3 +1,5 @@
+### start supabase and flask server
+
 ## 1. clone repo
 
 ```
@@ -63,3 +65,13 @@ if everything is correct, you’ll see in the terminal:
 ```
 deactivate
 ```
+
+### postman testing 
+
+request body expects JSON:
+    {
+        "tenant_code": "SG",
+        "transaction_date": "2025-10-16",
+        "scenario": "POS" or "NEG",
+        "rule_codes": ["AML-TRX-ALL-A-01", "AML-TRX-ALL-B-02", ...]
+    }

@@ -3,7 +3,7 @@ from datetime import datetime
 
 def get_amount_for_rule(rule_code, positive=True):
     if rule_code == "AML-TRX-ALL-A-01":  
-        return 150000 if positive else 80000
+        return random.randint(150000, 350000) if positive else random.randint(50000, 80000)
     elif rule_code == "AML-TRX-ALL-B-02":  
         return 10000 if positive else 10000
     elif rule_code == "AML-ATM-ALL-B-03":  
