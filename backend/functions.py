@@ -1,37 +1,27 @@
 import random
 from datetime import datetime
 
-def get_amount_for_rule(rule_code: str, positive: bool = True) -> float:
-    """
-    Generate realistic transaction amounts for AML rules.
-    positive=True means the transaction is meant to trigger (POS case).
-    """
-    if "A-01" in rule_code:  # High-Value Transaction
+def get_amount_for_rule(rule_code, positive=True):
+    if rule_code == "AML-TRX-ALL-A-01":  
         return 150000 if positive else 80000
-    elif "B-02" in rule_code:  # Sanctioned Country
-        return 5000
-    elif "C-03" in rule_code:  # ATM 3-Day Pattern
-        return 6000 if positive else 2000
-    elif "D-04" in rule_code:  # Frequent Low-Value Transfers
-        return 50 if positive else 150
-    return random.randint(100, 5000)
+    elif rule_code == "AML-TRX-ALL-B-02":  
+        return 10000 if positive else 10000
+    elif rule_code == "AML-ATM-ALL-B-03":  
+        return 6000 if positive else 3000
+    elif rule_code == "AML-XFER-ALL-C-04":  
+        return 80 if positive else 150
+    else:
+        return random.randint(100, 5000)
 
-def get_country_for_rule(rule_code: str, positive: bool = True) -> str:
-    """
-    Return destination country based on rule type.
-    """
-    if "B-02" in rule_code:
-        return "IR" if positive else "SG"  # Iran for POS (sanctioned)
-    return "SG"
+def get_country_for_rule(rule_code, positive=True):
+    if rule_code == "AML-TRX-ALL-B-02":  
+        return "IR" if positive else "SG"  
+    else:
+        return "SG"
 
-def generate_transaction_ref(rule_code: str, scenario: str) -> str:
-    """
-    Generate readable transaction reference IDs.
-    """
-    return f"{scenario}_{rule_code}_{random.randint(1000, 9999)}"
+def generate_transaction_ref(rule_code, scenario):
+    return f"{scenario}_{rule_code}_{random.randint(1000,9999)}"
 
-def get_run_name(tenant_code: str) -> str:
-    """
-    Create a timestamped run name for test_runs.
-    """
-    return f"Run_{tenant_code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+def get_run_name(tenant_code):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"Run_{tenant_code}_{timestamp}"

@@ -2,7 +2,7 @@
 
 ```
 git clone https://github.com/haofah14/aml-test-backend
-cd aml-test-backend
+cd backend
 ```
 
 ## 2. create venv
@@ -50,10 +50,12 @@ SUPABASE_KEY=your-service-role-key
 python app.py
 ```
 
-if everything is correct, you’ll see:
+if everything is correct, you’ll see in the terminal:
 
 ```
-* Running on http://127.0.0.1:5000
+ Flask server connected and running at http://127.0.0.1:5000
+ * Serving Flask app 'app'
+ * Debug mode: on
 ```
 
 ## 6. stop server
