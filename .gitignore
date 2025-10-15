@@ -1,16 +1,51 @@
-# Python
+# ===========================================
+# PYTHON / FLASK PROJECT
+# ===========================================
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.pdb
+*.log
+
+# Virtual environments
 venv/
+.env/
+.env.local
+.env.*.local
 
-# Environment
-.env
+# ===========================================
+# DATABASE / SUPABASE
+# ===========================================
+# Local database files or migrations (optional)
+db/*.sqlite3
+db/__pycache__/
+# Keep schema.sql and seed.sql — they're safe to commit
+!db/schema.sql
+!db/seed.sql
 
-# VS Code
+# ===========================================
+# EDITORS / IDE
+# ===========================================
 .vscode/
+.idea/
+*.swp
+*.swo
 
-# OS
+# ===========================================
+# OS-SPECIFIC FILES
+# ===========================================
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# ===========================================
+# TEST / CACHE / TEMP
+# ===========================================
+*.tmp
+*.bak
+*.old
+.cache/
+pytest_cache/
+.coverage
+htmlcov/
