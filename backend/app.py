@@ -6,9 +6,9 @@ from functions import (
     get_amount_for_rule,
     get_country_for_rule,
     generate_transaction_ref,
-    get_run_name
+    get_random_banking_source
 )
-import random
+import random, os
 
 app = Flask(__name__)
 CORS(app)
@@ -82,6 +82,7 @@ def add_transaction():
 def generate_transactions():
     """
     Generate test AML transactions dynamically for POS and NEG scenarios.
+    Exports results to a .txt file that mimics the 'Response' layout.
     Expects JSON:
     {
         "tenant_code": "SG",
@@ -92,7 +93,6 @@ def generate_transactions():
     """
     try:
         data = request.get_json()
-
         tenant_code = data.get("tenant_code")
         transaction_date = data.get("transaction_date") or datetime.now().strftime("%Y-%m-%d")
         scenario = data.get("scenario", "POS").upper()
@@ -101,122 +101,51 @@ def generate_transactions():
         if not tenant_code or not rule_codes:
             return jsonify({"error": "tenant_code and rule_codes are required"}), 400
 
-        # 1️. Fetch Tenant ID
-        tenant = supabase.table("tenants").select("*").eq("tenant_code", tenant_code).execute().data
-        if not tenant:
-            return jsonify({"error": f"Tenant '{tenant_code}' not found"}), 404
-        tenant_id = tenant[0]["id"]
+        # create output folder
+        os.makedirs("exports", exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"exports/transactions_{tenant_code}_{timestamp}.txt"
 
-        # 2. Create Test Run
-        run_name = get_run_name(tenant_code)
-        test_run = supabase.table("test_runs").insert({
-            "tenant_id": tenant_id,
-            "run_name": run_name,
-            "initiated_by": "webapp",
-            "status": "running"
-        }).execute().data[0]
-        test_run_id = test_run["id"]
+        transactions = []
 
-        generated = []
+        with open(filename, "w") as file:
+            for rule_code in rule_codes:
+                txn_id = generate_transaction_ref()
+                amount = get_amount_for_rule(rule_code, scenario)
+                to_country = get_country_for_rule(rule_code, scenario)
+                from_country = "SG"
+                currency = "SGD"
+                source_system = get_random_banking_source()
 
-        # 3. Generate transactions for each rule
-        for rule_code in rule_codes:
-            # Default number of transactions
-            num_txn = 1
+                block = (
+                    f"{tenant_code}\n"
+                    f"{transaction_date}\n"
+                    f"{txn_id}\n"
+                    f"{rule_code}\n"
+                    f"{amount}\n"
+                    f"{currency}\n"
+                    f"{source_system}\n"
+                    f"{from_country}-{to_country}\n"
+                    + "-" * 40 + "\n"
+                )
 
-            # --- Rule 3: ATM withdrawals pattern ---
-            if rule_code == "AML-ATM-ALL-C-03":
-                if scenario == "POS":
-                    num_txn = 3  # exactly 3 consecutive days
-                    base_amount = 5500  # > $5K
-                else:
-                    num_txn = random.randint(1, 2)  # fewer for NEG
-                    base_amount = 3000  # < $5K
-
-                for i in range(num_txn):
-                    txn_date = (datetime.strptime(transaction_date, "%Y-%m-%d") + timedelta(days=i)).strftime("%Y-%m-%d")
-                    amount = base_amount + random.uniform(100, 800)
-
-                    transaction = {
-                        "tenant_code": tenant_code,
-                        "transaction_date": txn_date,
-                        "transaction_ref": generate_transaction_ref(rule_code, scenario),
-                        "rule_code": rule_code,
-                        "amount": round(amount, 2),
-                        "currency_code": "SGD",
-                        "banking_source": "RBK",
-                        "from_country": "SG",
-                        "to_country": "SG",
-                        "test_run_id": test_run_id,
-                    }
-
-                    supabase.table("transactions").insert(transaction).execute()
-                    generated.append(transaction)
-                continue  # move to next rule
-
-            # --- Rule 4: Frequent low-value transfers ---
-            elif rule_code == "AML-XFER-ALL-D-04":
-                if scenario == "POS":
-                    num_txn = random.randint(10, 12)
-                    base_amount = 60  # <$100
-                else:
-                    num_txn = random.randint(3, 5)
-                    base_amount = 80  # also <$100 but fewer
-
-                for i in range(num_txn):
-                    txn_date = (datetime.strptime(transaction_date, "%Y-%m-%d") + timedelta(days=i % 5)).strftime("%Y-%m-%d")
-                    amount = base_amount + random.uniform(-10, 10)
-
-                    transaction = {
-                        "tenant_code": tenant_code,
-                        "transaction_date": txn_date,
-                        "transaction_ref": generate_transaction_ref(rule_code, scenario),
-                        "rule_code": rule_code,
-                        "amount": round(amount, 2),
-                        "currency_code": "SGD",
-                        "banking_source": "RBK",
-                        "from_country": "SG",
-                        "to_country": get_country_for_rule(rule_code, positive=(scenario == "POS")),
-                        "test_run_id": test_run_id,
-                    }
-
-                    supabase.table("transactions").insert(transaction).execute()
-                    generated.append(transaction)
-                continue
-
-            # --- Rules 1 & 2 (single transactions) ---
-            else:
-                amount = get_amount_for_rule(rule_code, positive=(scenario == "POS"))
-                transaction = {
+                file.write(block)
+                transactions.append({
                     "tenant_code": tenant_code,
                     "transaction_date": transaction_date,
-                    "transaction_ref": generate_transaction_ref(rule_code, scenario),
+                    "transaction_ref": txn_id,
                     "rule_code": rule_code,
-                    "amount": round(amount, 2),
-                    "currency_code": "SGD",
-                    "banking_source": "RBK",
-                    "from_country": "SG",
-                    "to_country": get_country_for_rule(rule_code, positive=(scenario == "POS")),
-                    "test_run_id": test_run_id,
-                }
+                    "amount": amount,
+                    "currency_code": currency,
+                    "banking_source": source_system,
+                    "from_country": from_country,
+                    "to_country": to_country
+                })
 
-                supabase.table("transactions").insert(transaction).execute()
-                generated.append(transaction)
-
-        # 4. Mark test run complete
-        supabase.table("test_runs").update({
-            "status": "completed",
-            "completed_at": datetime.now().isoformat()
-        }).eq("id", test_run_id).execute()
-
-        # 5. Return JSON response
         return jsonify({
-            "message": f"✅ Generated {len(generated)} {scenario} transactions for {tenant_code}",
-            "test_run_id": test_run_id,
-            "run_name": run_name,
-            "scenario": scenario,
-            "count": len(generated),
-            "transactions": generated
+            "message": f"✅ Generated {len(transactions)} transactions for {tenant_code} ({scenario})",
+            "export_file": filename,
+            "transactions": transactions
         })
 
     except Exception as e:
