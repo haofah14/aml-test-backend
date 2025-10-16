@@ -1,5 +1,5 @@
 -- =====================================================
--- 1️⃣ BANKING SOURCES
+-- 1. BANKING SOURCES
 -- =====================================================
 DROP TABLE IF EXISTS public.banking_sources CASCADE;
 CREATE TABLE public.banking_sources (
@@ -20,7 +20,7 @@ VALUES
 ('FIS', 'Information Services', 'Financial data services');
 
 -- =====================================================
--- 2️⃣ COUNTRIES
+-- 2. COUNTRIES
 -- =====================================================
 DROP TABLE IF EXISTS public.countries CASCADE;
 CREATE TABLE public.countries (
@@ -296,7 +296,7 @@ WHERE code IN (
 );
 
 -- =====================================================
--- 3️⃣ CURRENCY
+-- 3. CURRENCY
 -- =====================================================
 DROP TABLE IF EXISTS public.currency CASCADE;
 CREATE TABLE public.currency (
@@ -321,7 +321,7 @@ VALUES
 ('USD', 'United States Dollar', 'US');
 
 -- =====================================================
--- 4️⃣ TENANTS
+-- 4. TENANTS
 -- =====================================================
 DROP TABLE IF EXISTS public.tenants CASCADE;
 CREATE TABLE public.tenants (
@@ -349,7 +349,7 @@ VALUES
 ('NZ', 'New Zealand');
 
 -- =====================================================
--- 5️⃣ RULES
+-- 5. RULES
 -- =====================================================
 DROP TABLE IF EXISTS public.rules CASCADE;
 CREATE TABLE public.rules (
@@ -357,28 +357,23 @@ CREATE TABLE public.rules (
   rule_code TEXT UNIQUE NOT NULL,
   rule_name TEXT,
   description TEXT,
-  threshold JSONB,
   transaction_type TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
-INSERT INTO public.rules (rule_code, rule_name, description, threshold, transaction_type)
+INSERT INTO public.rules (rule_code, rule_name, description, transaction_type)
 VALUES
 ('AML-TRX-ALL-A-01', 'High-Value Transaction',
- 'Transaction Amount is greater than $100K',
- '{"amount_gt": 100000}', 'TRANSFER'),
+ 'Transaction Amount is greater than $100K', 'TRANSFER'),
 ('AML-TRX-ALL-B-02', 'Transaction to Sanctioned Country',
- 'Transaction made to any sanctioned country (from countries table)',
- '{"is_sanctioned": true}', 'TRANSFER'),
+ 'Transaction made to any sanctioned country (from countries table)', 'TRANSFER'),
 ('AML-ATM-ALL-C-03', 'ATM 3-Day Withdrawal Pattern',
- '3 ATM withdrawals made in 3 consecutive days with transaction amount more than $5K',
- '{"min_withdrawals": 3, "period_days": 3, "amount_gt": 5000}', 'ATM'),
+ '3 ATM withdrawals made in 3 consecutive days with transaction amount more than $5K', 'ATM'),
 ('AML-XFER-ALL-D-04', 'Frequent Low-Value Transfers',
- 'Money sent 10 times to the same country where amount is less than $100',
- '{"count": 10, "amount_lt": 100}', 'TRANSFER');
+ 'Money sent 10 times to the same country where amount is less than $100', 'TRANSFER');
 
 -- =====================================================
--- 6️⃣ RULES ↔ TENANTS MAPPING
+-- 6. RULES ↔ TENANTS MAPPING
 -- =====================================================
 DROP TABLE IF EXISTS public.rulestenants CASCADE;
 CREATE TABLE public.rulestenants (
@@ -392,3 +387,33 @@ INSERT INTO public.rulestenants (rule_id, tenant_id, created_at)
 SELECT r.id, t.id, NOW()
 FROM public.rules r
 CROSS JOIN public.tenants t;
+
+-- =====================================================
+--  7. THRESHOLDS
+-- =====================================================
+
+DROP TABLE IF EXISTS public.thresholds CASCADE;
+CREATE TABLE public.thresholds (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  rule_id UUID UNIQUE REFERENCES public.rules(id) ON DELETE CASCADE,
+  amount_gt NUMERIC,
+  amount_lt NUMERIC,
+  count INTEGER,
+  min_withdrawals INTEGER,
+  period_days INTEGER,
+  is_sanctioned BOOLEAN,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+INSERT INTO public.thresholds (rule_id, amount_gt, is_sanctioned, min_withdrawals, period_days, count, amount_lt)
+SELECT
+  r.id,
+  CASE WHEN r.rule_code = 'AML-TRX-ALL-A-01' THEN 100000
+       WHEN r.rule_code = 'AML-ATM-ALL-C-03' THEN 5000
+       ELSE NULL END AS amount_gt,
+  CASE WHEN r.rule_code = 'AML-TRX-ALL-B-02' THEN TRUE ELSE NULL END AS is_sanctioned,
+  CASE WHEN r.rule_code = 'AML-ATM-ALL-C-03' THEN 3 ELSE NULL END AS min_withdrawals,
+  CASE WHEN r.rule_code = 'AML-ATM-ALL-C-03' THEN 3 ELSE NULL END AS period_days,
+  CASE WHEN r.rule_code = 'AML-XFER-ALL-D-04' THEN 10 ELSE NULL END AS count,
+  CASE WHEN r.rule_code = 'AML-XFER-ALL-D-04' THEN 100 ELSE NULL END AS amount_lt
+FROM public.rules r;
