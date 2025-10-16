@@ -86,14 +86,15 @@ def generate_transactions():
         "tenant_code": "SG",
         "transaction_date": "2025-10-16",
         "scenario": "POS" or "NEG",
-        "rule_codes": ["AML-TRX-ALL-A-01", "AML-TRX-ALL-B-02", ...]
+        "rule_codes": ["AML-TRX-ALL-A-01", "AML-XFER-ALL-D-04", ...]
     }
     """
     try:
         data = request.get_json()
         tenant_code = data.get("tenant_code")
-        transaction_date = data.get("transaction_date") 
+        transaction_date = data.get("transaction_date")
         scenario = data.get("scenario", "POS").upper()
+        scenario_text = "positive" if scenario == "POS" else "negative"
         rule_codes = data.get("rule_codes", [])
 
         if not tenant_code or not rule_codes:
@@ -103,32 +104,85 @@ def generate_transactions():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"transactions/transactions_{tenant_code}_{timestamp}.txt"
 
+        # Fetch tenant’s currency
         tenant_data = supabase.table("tenants").select("currency_code").eq("tenant_code", tenant_code).execute().data
         currency = tenant_data[0]["currency_code"] if tenant_data and tenant_data[0].get("currency_code") else "SGD"
 
+        # Fetch banking sources
         sources_data = supabase.table("banking_sources").select("id").execute().data
         banking_sources = [s["id"] for s in sources_data] if sources_data else ["RBK"]
-
-        txn_time = datetime.now().strftime("%H%M%S")
 
         transactions = []
 
         with open(filename, "w", encoding="utf-8") as file:
             for rule_code in rule_codes:
+                # --- 🔹 Special case for Rule 4: Frequent Low-Value Transfers ---
+                if rule_code == "AML-XFER-ALL-D-04":
+                    # Get count from thresholds table
+                    threshold_data = (
+                        supabase.table("thresholds")
+                        .select("count")
+                        .eq("rule_id", supabase.table("rules").select("id").eq("rule_code", rule_code).execute().data[0]["id"])
+                        .execute()
+                        .data
+                    )
+                    txn_count = threshold_data[0]["count"] if threshold_data else 10  # fallback to 10
+
+                    for i in range(txn_count):
+                        txn_id = generate_transaction_id()
+                        txn_time = datetime.now().strftime("%H%M%S")
+                        rand7 = str(random.randint(1000000, 9999999)).zfill(7)
+                        from_country = tenant_code
+                        to_country = get_country_for_rule(rule_code, scenario)
+                        amount = get_amount_for_rule(rule_code, scenario)
+                        source_system = random.choice(banking_sources)
+                        dynamic_tag = f"{from_country}{to_country}TXN{random.randint(10,99)}"
+
+                        line = (
+                            f"{tenant_code}{transaction_date.replace('-', '')}{txn_id}"
+                            f"~##~{tenant_code}"
+                            f"~##~{tenant_code}{txn_time}{rand7}{currency}"
+                            f"~##~{amount}"
+                            f"~##~~##~{scenario_text}{rule_code}{transaction_date.replace('-', '')}"
+                            + "~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~TCOECDGEN"
+                            + f"~##~~##~~##~{dynamic_tag}"
+                            + f"~##~~##~{transaction_date.replace('-', '')}{txn_time}"
+                            + f"~##~UOB~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~{amount}"
+                            f"~##~{currency}~##~~##~~##~~##~~##~~##~1~##~~##~~##~~##~~##~~##~~##~{source_system}~##~~##~110~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~{from_country}-{to_country}~##~~##~~##~~##~~##~~##~{random.randint(4000,9999)}~##~~##~~##~~##~~##~C~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~"
+                        )
+
+                        file.write(line + "\n")
+
+                        transactions.append({
+                            "tenant_code": tenant_code,
+                            "transaction_date": transaction_date,
+                            "transaction_ref": txn_id,
+                            "rule_code": rule_code,
+                            "amount": amount,
+                            "currency_code": currency,
+                            "banking_source": source_system,
+                            "from_country": from_country,
+                            "to_country": to_country
+                        })
+
+                    continue  # skip the rest, already generated 10 transactions
+
+                # --- 🔹 Default (all other rules) ---
                 txn_id = generate_transaction_id()
-                amount = get_amount_for_rule(rule_code, scenario)
-                to_country = get_country_for_rule(rule_code, scenario)
+                txn_time = datetime.now().strftime("%H%M%S")
+                rand7 = str(random.randint(1000000, 9999999)).zfill(7)
                 from_country = tenant_code
+                to_country = get_country_for_rule(rule_code, scenario)
+                amount = get_amount_for_rule(rule_code, scenario)
                 source_system = random.choice(banking_sources)
                 dynamic_tag = f"{from_country}{to_country}TXN{random.randint(10,99)}"
-                rand6 = str(random.randint(100000, 999999)).zfill(6)
 
                 line = (
-                    f"{tenant_code}{transaction_date}{txn_id}"
+                    f"{tenant_code}{transaction_date.replace('-', '')}{txn_id}"
                     f"~##~{tenant_code}"
-                    f"~##~{tenant_code}{txn_time}{rand6}{currency}"
+                    f"~##~{tenant_code}{txn_time}{rand7}{currency}"
                     f"~##~{amount}"
-                    f"~##~~##~{scenario.lower()}{rule_code}{transaction_date}"
+                    f"~##~~##~{scenario_text}{rule_code}{transaction_date.replace('-', '')}"
                     + "~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~TCOECDGEN"
                     + f"~##~~##~~##~{dynamic_tag}"
                     + f"~##~~##~{transaction_date.replace('-', '')}{txn_time}"
@@ -151,7 +205,7 @@ def generate_transactions():
                 })
 
         return jsonify({
-            "message": f"✅ Generated {len(transactions)} transactions for {tenant_code} ({scenario})",
+            "message": f"✅ Generated {len(transactions)} transactions for {tenant_code} ({scenario_text})",
             "export_file": filename,
             "transactions": transactions
         })

@@ -39,7 +39,13 @@ def get_country_for_rule(rule_code, scenario="POS"):
             return random.choice(sanctioned)["code"]
     return "SG"
 
+'''
 def generate_transaction_id():
     """Generate transaction ID: ATC + DDMMYYYY + MMSS"""
     now = datetime.now()
     return "ATC" + now.strftime("%d%m%Y%M%S")
+'''
+
+def generate_transaction_id():
+    """Generate transaction ID: ATC + 10 random digits (e.g., ATC0000000079)"""
+    return f"ATC{random.randint(0, 9999999999):010d}"
