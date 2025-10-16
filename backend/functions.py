@@ -39,17 +39,7 @@ def get_country_for_rule(rule_code, scenario="POS"):
             return random.choice(sanctioned)["code"]
     return "SG"
 
-def get_random_banking_source():
-    """
-    Fetch all banking sources from Supabase and pick one randomly.
-    Returns the 'id' (e.g., 'RBK', 'REM', etc.)
-    """
-    sources = supabase.table("banking_sources").select("id").execute().data
-    if not sources:
-        return "RBK"  
-    return random.choice(sources)["id"]
-
-def generate_transaction_ref():
-    """Generate transaction ID: ATC + DDMMYYYY + HHMM"""
+def generate_transaction_id():
+    """Generate transaction ID: ATC + DDMMYYYY + MMSS"""
     now = datetime.now()
-    return "ATC" + now.strftime("%d%m%Y%H%M")
+    return "ATC" + now.strftime("%d%m%Y%M%S")

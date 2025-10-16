@@ -318,7 +318,15 @@ VALUES
 ('JPY', 'Japanese Yen', 'JP'),
 ('NZD', 'New Zealand Dollar', 'NZ'),
 ('SGD', 'Singapore Dollar', 'SG'),
-('USD', 'United States Dollar', 'US');
+('USD', 'United States Dollar', 'US'),
+('MYR', 'Malaysian Ringgit', 'MY'),
+('IDR', 'Indonesian Rupiah', 'ID'),
+('THB', 'Thai Baht', 'TH'),
+('VND', 'Vietnamese Dong', 'VN'),
+('PHP', 'Philippine Peso', 'PH'),
+('MMK', 'Myanmar Kyat', 'MM'),
+('KRW', 'South Korean Won', 'KR'),
+('TWD', 'New Taiwan Dollar', 'TW');
 
 -- =====================================================
 -- 4. TENANTS
@@ -328,25 +336,26 @@ CREATE TABLE public.tenants (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_code TEXT UNIQUE,
   name TEXT NOT NULL,
+  currency_code CHAR(3) REFERENCES public.currency(code),
   created_at TIMESTAMP DEFAULT NOW()
 );
 
-INSERT INTO public.tenants (tenant_code, name)
+INSERT INTO public.tenants (tenant_code, name, currency_code)
 VALUES
-('SG', 'Singapore'),
-('MY', 'Malaysia'),
-('ID', 'Indonesia'),
-('TH', 'Thailand'),
-('VN', 'Vietnam'),
-('PH', 'Philippines'),
-('MM', 'Myanmar'),
-('HK', 'Hong Kong'),
-('CN', 'China'),
-('JP', 'Japan'),
-('KR', 'South Korea'),
-('TW', 'Taiwan'),
-('AU', 'Australia'),
-('NZ', 'New Zealand');
+('SG', 'Singapore', 'SGD'),
+('MY', 'Malaysia', 'MYR'),
+('ID', 'Indonesia', 'IDR'),
+('TH', 'Thailand', 'THB'),
+('VN', 'Vietnam', 'VND'),
+('PH', 'Philippines', 'PHP'),
+('MM', 'Myanmar', 'MMK'),
+('HK', 'Hong Kong', 'HKD'),
+('CN', 'China', 'CNY'),
+('JP', 'Japan', 'JPY'),
+('KR', 'South Korea', 'KRW'),
+('TW', 'Taiwan', 'TWD'),
+('AU', 'Australia', 'AUD'),
+('NZ', 'New Zealand', 'NZD');
 
 -- =====================================================
 -- 5. RULES

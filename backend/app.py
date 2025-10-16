@@ -5,8 +5,7 @@ from datetime import datetime, timedelta
 from functions import (
     get_amount_for_rule,
     get_country_for_rule,
-    generate_transaction_ref,
-    get_random_banking_source
+    generate_transaction_id
 )
 import random, os
 
@@ -77,13 +76,12 @@ def add_transaction():
     result = supabase.table("transactions").insert(payload).execute()
     return jsonify(result.data), 201
 
-# Generate Transactions
 @app.route("/generate_transactions", methods=["POST"])
 def generate_transactions():
     """
-    Generate test AML transactions dynamically for POS and NEG scenarios.
-    Exports results to a .txt file that mimics the 'Response' layout.
-    Expects JSON:
+    Generate AML transactions dynamically for POS and NEG scenarios.
+    Export results to a .txt file in Actimize-style format.
+    JSON body:
     {
         "tenant_code": "SG",
         "transaction_date": "2025-10-16",
@@ -94,42 +92,52 @@ def generate_transactions():
     try:
         data = request.get_json()
         tenant_code = data.get("tenant_code")
-        transaction_date = data.get("transaction_date") or datetime.now().strftime("%Y-%m-%d")
+        transaction_date = data.get("transaction_date") 
         scenario = data.get("scenario", "POS").upper()
         rule_codes = data.get("rule_codes", [])
 
         if not tenant_code or not rule_codes:
             return jsonify({"error": "tenant_code and rule_codes are required"}), 400
-
-        # create output folder
-        os.makedirs("exports", exist_ok=True)
+        
+        os.makedirs("transactions", exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"exports/transactions_{tenant_code}_{timestamp}.txt"
+        filename = f"transactions/transactions_{tenant_code}_{timestamp}.txt"
+
+        tenant_data = supabase.table("tenants").select("currency_code").eq("tenant_code", tenant_code).execute().data
+        currency = tenant_data[0]["currency_code"] if tenant_data and tenant_data[0].get("currency_code") else "SGD"
+
+        sources_data = supabase.table("banking_sources").select("id").execute().data
+        banking_sources = [s["id"] for s in sources_data] if sources_data else ["RBK"]
+
+        txn_time = datetime.now().strftime("%H%M%S")
 
         transactions = []
 
-        with open(filename, "w") as file:
+        with open(filename, "w", encoding="utf-8") as file:
             for rule_code in rule_codes:
-                txn_id = generate_transaction_ref()
+                txn_id = generate_transaction_id()
                 amount = get_amount_for_rule(rule_code, scenario)
                 to_country = get_country_for_rule(rule_code, scenario)
-                from_country = "SG"
-                currency = "SGD"
-                source_system = get_random_banking_source()
+                from_country = tenant_code
+                source_system = random.choice(banking_sources)
+                dynamic_tag = f"{from_country}{to_country}TXN{random.randint(10,99)}"
+                rand6 = str(random.randint(100000, 999999)).zfill(6)
 
-                block = (
-                    f"{tenant_code}\n"
-                    f"{transaction_date}\n"
-                    f"{txn_id}\n"
-                    f"{rule_code}\n"
-                    f"{amount}\n"
-                    f"{currency}\n"
-                    f"{source_system}\n"
-                    f"{from_country}-{to_country}\n"
-                    + "-" * 40 + "\n"
+                line = (
+                    f"{tenant_code}{transaction_date}{txn_id}"
+                    f"~##~{tenant_code}"
+                    f"~##~{tenant_code}{txn_time}{rand6}{currency}"
+                    f"~##~{amount}"
+                    f"~##~~##~{scenario.lower()}{rule_code}{transaction_date}"
+                    + "~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~TCOECDGEN"
+                    + f"~##~~##~~##~{dynamic_tag}"
+                    + f"~##~~##~{transaction_date.replace('-', '')}{txn_time}"
+                    + f"~##~UOB~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~{amount}"
+                    f"~##~{currency}~##~~##~~##~~##~~##~~##~1~##~~##~~##~~##~~##~~##~~##~{source_system}~##~~##~110~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~{from_country}-{to_country}~##~~##~~##~~##~~##~~##~{random.randint(4000,9999)}~##~~##~~##~~##~~##~C~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~~##~"
                 )
 
-                file.write(block)
+                file.write(line + "\n")
+
                 transactions.append({
                     "tenant_code": tenant_code,
                     "transaction_date": transaction_date,
@@ -149,7 +157,7 @@ def generate_transactions():
         })
 
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"❌ Error generating transactions: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
