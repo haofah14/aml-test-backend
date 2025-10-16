@@ -1,4 +1,6 @@
--- 1. BANKING SOURCES
+-- =====================================================
+-- 1️⃣ BANKING SOURCES
+-- =====================================================
 DROP TABLE IF EXISTS public.banking_sources CASCADE;
 CREATE TABLE public.banking_sources (
   id TEXT PRIMARY KEY,
@@ -6,90 +8,6 @@ CREATE TABLE public.banking_sources (
   description TEXT
 );
 
--- 2. COUNTRIES
-DROP TABLE IF EXISTS public.countries CASCADE;
-CREATE TABLE public.countries (
-  code CHAR(2) PRIMARY KEY,
-  name TEXT NOT NULL,
-  risk_tier TEXT DEFAULT 'Low',
-  is_sanctioned BOOLEAN DEFAULT FALSE
-);
-
--- 3. CURRENCY
-DROP TABLE IF EXISTS public.currency CASCADE;
-CREATE TABLE public.currency (
-  code CHAR(3) PRIMARY KEY,
-  name TEXT,
-  country_code CHAR(2),
-  created_at TIMESTAMP DEFAULT NOW(),
-  CONSTRAINT currency_country_code_fkey
-    FOREIGN KEY (country_code) REFERENCES public.countries(code)
-);
-
--- 4. TENANTS
-DROP TABLE IF EXISTS public.tenants CASCADE;
-CREATE TABLE public.tenants (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_code TEXT UNIQUE,
-  name TEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- 5. RULES
-DROP TABLE IF EXISTS public.rules CASCADE;
-CREATE TABLE public.rules (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  rule_code TEXT UNIQUE NOT NULL,
-  rule_name TEXT,
-  description TEXT,
-  threshold JSONB,
-  transaction_type TEXT,
-  expected_alert BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- 6. RULES ↔ TENANTS MAPPING (all tenants get all rules)
-DROP TABLE IF EXISTS public.rulestenants CASCADE;
-CREATE TABLE public.rulestenants (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  rule_id UUID REFERENCES public.rules(id),
-  tenant_id UUID REFERENCES public.tenants(id),
-  is_active BOOLEAN DEFAULT TRUE,
-  custom_threshold JSONB,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- 7. TEST RUNS (unchanged)
-DROP TABLE IF EXISTS public.test_runs CASCADE;
-CREATE TABLE public.test_runs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID REFERENCES public.tenants(id),
-  run_name TEXT,
-  initiated_by TEXT,
-  started_at TIMESTAMP DEFAULT NOW(),
-  completed_at TIMESTAMP,
-  status TEXT DEFAULT 'running'
-);
-
--- 8. TRANSACTIONS (linked to test_runs)
-DROP TABLE IF EXISTS public.transactions CASCADE;
-
-CREATE TABLE public.transactions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_code TEXT NOT NULL,               -- e.g. 'SG'
-  transaction_date DATE NOT NULL,          -- business date
-  transaction_ref TEXT,                    -- transaction ID (e.g. ATC0000000079)
-  rule_code TEXT,                          -- AML rule code (e.g. AML-TRX-ALL-A-01)
-  amount NUMERIC,                          -- transaction amount
-  currency_code CHAR(3) REFERENCES public.currency(code),
-  banking_source TEXT REFERENCES public.banking_sources(id),
-  from_country CHAR(2) REFERENCES public.countries(code),
-  to_country CHAR(2) REFERENCES public.countries(code),
-  test_run_id UUID REFERENCES public.test_runs(id),   -- links transaction → test run
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- 1. Populate static data for banking_sources
 INSERT INTO public.banking_sources (id, name, description)
 VALUES
 ('RBK', 'Retail Banking', 'Where customer accounts are stored'),
@@ -101,10 +19,10 @@ VALUES
 ('SKN', 'Settlement System', 'Handles interbank clearing and settlements'),
 ('FIS', 'Information Services', 'Financial data services');
 
--- 2. Populate static data for countries
-
+-- =====================================================
+-- 2️⃣ COUNTRIES
+-- =====================================================
 DROP TABLE IF EXISTS public.countries CASCADE;
-
 CREATE TABLE public.countries (
   code CHAR(2) PRIMARY KEY,
   name TEXT NOT NULL,
@@ -366,13 +284,9 @@ VALUES
 
 UPDATE public.countries
 SET risk_tier = 'Low', is_sanctioned = FALSE;
-
--- ===== High Risk / Sanctioned (Blacklist) =====
 UPDATE public.countries
 SET risk_tier = 'High', is_sanctioned = TRUE
 WHERE code IN ('IR', 'KP', 'MM');
-
--- ===== Medium Risk (Grey / Increased Monitoring) =====
 UPDATE public.countries
 SET risk_tier = 'Medium', is_sanctioned = FALSE
 WHERE code IN (
@@ -381,14 +295,24 @@ WHERE code IN (
   'SN', 'ZA', 'SS', 'SY', 'TZ', 'VE', 'VN', 'CM', 'CR'
 );
 
--- 3. Populate currency table
+-- =====================================================
+-- 3️⃣ CURRENCY
+-- =====================================================
+DROP TABLE IF EXISTS public.currency CASCADE;
+CREATE TABLE public.currency (
+  code CHAR(3) PRIMARY KEY,
+  name TEXT,
+  country_code CHAR(2) REFERENCES public.countries(code),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 INSERT INTO public.currency (code, name, country_code)
 VALUES
 ('AUD', 'Australian Dollar', 'AU'),
 ('CAD', 'Canadian Dollar', 'CA'),
 ('CHF', 'Swiss Franc', 'CH'),
 ('CNY', 'Chinese Yuan', 'CN'),
-('EUR', 'Euro', 'NA'),
+('EUR', 'Euro', 'NL'),
 ('GBP', 'British Pound Sterling', 'GB'),
 ('HKD', 'Hong Kong Dollar', 'HK'),
 ('JPY', 'Japanese Yen', 'JP'),
@@ -396,7 +320,17 @@ VALUES
 ('SGD', 'Singapore Dollar', 'SG'),
 ('USD', 'United States Dollar', 'US');
 
--- 4. Populate tenants table
+-- =====================================================
+-- 4️⃣ TENANTS
+-- =====================================================
+DROP TABLE IF EXISTS public.tenants CASCADE;
+CREATE TABLE public.tenants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_code TEXT UNIQUE,
+  name TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 INSERT INTO public.tenants (tenant_code, name)
 VALUES
 ('SG', 'Singapore'),
@@ -414,32 +348,47 @@ VALUES
 ('AU', 'Australia'),
 ('NZ', 'New Zealand');
 
--- 5. Populate AML Rules
+-- =====================================================
+-- 5️⃣ RULES
+-- =====================================================
+DROP TABLE IF EXISTS public.rules CASCADE;
+CREATE TABLE public.rules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  rule_code TEXT UNIQUE NOT NULL,
+  rule_name TEXT,
+  description TEXT,
+  threshold JSONB,
+  transaction_type TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
 
 INSERT INTO public.rules (rule_code, rule_name, description, threshold, transaction_type)
 VALUES
--- Rule 1: High-Value Transaction
 ('AML-TRX-ALL-A-01', 'High-Value Transaction',
  'Transaction Amount is greater than $100K',
  '{"amount_gt": 100000}', 'TRANSFER'),
-
--- Rule 2: Transaction to Sanctioned Country (dynamic)
 ('AML-TRX-ALL-B-02', 'Transaction to Sanctioned Country',
- 'Transaction made to any sanctioned country (from table countries where is_sanctioned = true)',
+ 'Transaction made to any sanctioned country (from countries table)',
  '{"is_sanctioned": true}', 'TRANSFER'),
-
--- Rule 3: ATM 3-Day Withdrawal Pattern
 ('AML-ATM-ALL-C-03', 'ATM 3-Day Withdrawal Pattern',
  '3 ATM withdrawals made in 3 consecutive days with transaction amount more than $5K',
  '{"min_withdrawals": 3, "period_days": 3, "amount_gt": 5000}', 'ATM'),
-
--- Rule 4: Frequent Low-Value Transfers
 ('AML-XFER-ALL-D-04', 'Frequent Low-Value Transfers',
  'Money sent 10 times to the same country where amount is less than $100',
  '{"count": 10, "amount_lt": 100}', 'TRANSFER');
 
--- 6. Map all tenants to all rules
-INSERT INTO public.rulestenants (rule_id, tenant_id, is_active, created_at)
-SELECT r.id, t.id, TRUE, NOW()
+-- =====================================================
+-- 6️⃣ RULES ↔ TENANTS MAPPING
+-- =====================================================
+DROP TABLE IF EXISTS public.rulestenants CASCADE;
+CREATE TABLE public.rulestenants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  rule_id UUID REFERENCES public.rules(id),
+  tenant_id UUID REFERENCES public.tenants(id),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+INSERT INTO public.rulestenants (rule_id, tenant_id, created_at)
+SELECT r.id, t.id, NOW()
 FROM public.rules r
 CROSS JOIN public.tenants t;
