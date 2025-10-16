@@ -116,9 +116,7 @@ def generate_transactions():
 
         with open(filename, "w", encoding="utf-8") as file:
             for rule_code in rule_codes:
-                # --- 🔹 Special case for Rule 4: Frequent Low-Value Transfers ---
                 if rule_code == "AML-XFER-ALL-D-04":
-                    # Get count from thresholds table
                     threshold_data = (
                         supabase.table("thresholds")
                         .select("count")
@@ -126,7 +124,11 @@ def generate_transactions():
                         .execute()
                         .data
                     )
-                    txn_count = threshold_data[0]["count"] if threshold_data else 10  # fallback to 10
+                    txn_count = threshold_data[0]["count"] if threshold_data else 10  
+
+                    source_system = random.choice(banking_sources)
+                    from_country = tenant_code
+                    to_country = get_country_for_rule(rule_code, scenario)
 
                     for i in range(txn_count):
                         txn_id = generate_transaction_id()
@@ -135,7 +137,6 @@ def generate_transactions():
                         from_country = tenant_code
                         to_country = get_country_for_rule(rule_code, scenario)
                         amount = get_amount_for_rule(rule_code, scenario)
-                        source_system = random.choice(banking_sources)
                         dynamic_tag = f"{from_country}{to_country}TXN{random.randint(10,99)}"
 
                         line = (
@@ -165,9 +166,8 @@ def generate_transactions():
                             "to_country": to_country
                         })
 
-                    continue  # skip the rest, already generated 10 transactions
+                    continue  
 
-                # --- 🔹 Default (all other rules) ---
                 txn_id = generate_transaction_id()
                 txn_time = datetime.now().strftime("%H%M%S")
                 rand7 = str(random.randint(1000000, 9999999)).zfill(7)
