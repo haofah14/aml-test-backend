@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from db import supabase
 from datetime import datetime
@@ -39,7 +39,6 @@ def get_rules_for_tenant(tenant_code):
             return jsonify({"error": f"Tenant '{tenant_code}' not found"}), 404
         tenant_id = tenant_data[0]["id"]
 
-        # Get rules mapped to tenant
         rule_mappings = (
             supabase.table("rulestenants")
             .select("rules(rule_code, rule_name, description)")
@@ -51,6 +50,7 @@ def get_rules_for_tenant(tenant_code):
     except Exception as e:
         print(f"❌ Error fetching rules for tenant {tenant_code}: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/rules", methods=["POST"])
 def add_rule():
@@ -96,9 +96,6 @@ def add_transaction():
     return jsonify(result.data), 201
 
 
-# =========================================================
-# TRANSACTION GENERATOR
-# =========================================================
 @app.route("/generate_transactions", methods=["POST"])
 def generate_transactions():
     """
@@ -138,6 +135,7 @@ def generate_transactions():
 
         with open(filename, "w", encoding="utf-8") as file:
             for rule_code in rule_codes:
+                # for rule 4
                 if rule_code == "AML-XFER-ALL-D-04":
                     threshold_data = (
                         supabase.table("thresholds")
@@ -147,7 +145,7 @@ def generate_transactions():
                         .data
                     )
                     txn_count = threshold_data[0]["count"] if threshold_data else 10
-                    source_system = random.choice(banking_sources)  # Same for all 10
+                    source_system = random.choice(banking_sources)  
                     from_country = tenant_code
                     to_country = get_country_for_rule(rule_code, scenario)
 
@@ -185,7 +183,8 @@ def generate_transactions():
                             "to_country": to_country
                         })
                     continue
-
+                
+                # for rules 1 and 2
                 txn_id = generate_transaction_id()
                 txn_time = datetime.now().strftime("%H%M%S")
                 rand7 = str(random.randint(1000000, 9999999)).zfill(7)
@@ -230,6 +229,20 @@ def generate_transactions():
 
     except Exception as e:
         print(f"❌ Error generating transactions: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/download/<path:filename>", methods=["GET"])
+def download_file(filename):
+    """
+    Allows frontend to download generated transaction files.
+    Example: /download/transactions_SG_20251018_134512.txt
+    """
+    try:
+        directory = os.path.join(os.getcwd(), "transactions")
+        return send_from_directory(directory, filename, as_attachment=True)
+    except Exception as e:
+        print(f"❌ Error sending file: {e}")
         return jsonify({"error": str(e)}), 500
 
 
